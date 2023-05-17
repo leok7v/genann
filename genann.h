@@ -28,6 +28,7 @@
 #define GENANN_H
 
 #include <stdio.h>
+#include "fffc.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -41,7 +42,7 @@ extern "C" {
 
 struct genann;
 
-typedef double (*genann_actfun)(const struct genann *ann, double a);
+typedef double (*genann_actfun)(double a);
 
 typedef struct genann {
     /* How many inputs, outputs, and hidden neurons. */
@@ -68,6 +69,9 @@ typedef struct genann {
     /* Stores delta of each hidden and output neuron (total_neurons - inputs long). */
     double *delta;
 
+    genann_actfun derivative_hidden;
+    genann_actfun derivative_output;
+    fffc_t* nn1;
 } genann;
 
 /* Creates and returns a new ann. */
@@ -86,19 +90,20 @@ genann *genann_copy(genann const *ann);
 void genann_free(genann *ann);
 
 /* Runs the feedforward algorithm to calculate the ann's output. */
-double const *genann_run(genann const *ann, double const *inputs);
+double const *genann_run(genann* ann, double const *inputs);
 
 /* Does a single backprop update. */
-void genann_train(genann const *ann, double const *inputs, double const *desired_outputs, double learning_rate);
+void genann_train(genann *ann, double const *inputs, double const *desired_outputs, double learning_rate);
 
 /* Saves the ann. */
 void genann_write(genann const *ann, FILE *out);
 
-void genann_init_sigmoid_lookup(const genann *ann);
-double genann_act_sigmoid(const genann *ann, double a);
-double genann_act_sigmoid_cached(const genann *ann, double a);
-double genann_act_threshold(const genann *ann, double a);
-double genann_act_linear(const genann *ann, double a);
+// void genann_init_sigmoid_lookup(const genann *ann);
+double genann_act_sigmoid(double a);
+double genann_act_relu(double a);
+double genann_act_tanh(double a);
+double genann_act_linear(double a);
+//double genann_act_threshold(double a); // no derivative!
 
 
 #ifdef __cplusplus
