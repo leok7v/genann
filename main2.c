@@ -71,7 +71,7 @@ int main2(int argc, const char* argv[]) {
         }
     }
     e /= (double)n * (double)n; // length of [countof[input]] dimensional vector
-    printf("error: %.16e\n", e);
+    printf("error: %.16f\n", e);
     double in0[2] = {9.0, 9.0};
     double r9p9 = *genann_run(nn0, in0);
     printf("%10.6f * %10.6f = %10.6f %10.6f delta=%.16e\n",

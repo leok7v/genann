@@ -54,7 +54,7 @@ int main1(int argc, const char* argv[]) {
         printf("sin(%6.3f): %6.3f truth %6.3f rms %6.3f\n", r2d(inputs[i]), output[i], truth[i], rms);
     }
     e /= countof(inputs); // length of [countof[input]] dimensional vector
-    printf("error: %.16e\n", e);
+    printf("error: %.16f\n", e);
     genann_free(nn0);
     return 0;
 }

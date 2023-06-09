@@ -152,10 +152,10 @@ double genann_act_threshold(double a) {
 }
 
 genann *genann_init(int inputs, int hidden_layers, int hidden, int outputs) {
-    assertion(hidden_layers >= 1);
+    assertion(hidden_layers >= 0);
     assertion(inputs >= 1);
     assertion(outputs >= 1);
-    assertion(hidden >= 1);
+    assertion(hidden_layers > 0 && hidden > 0 || hidden_layers == 0 && hidden == 0);
 //  traceln("inputs: %d", inputs);
 //  traceln("hidden_layers: %d", hidden_layers);
 //  traceln("hidden: %d", hidden);
@@ -192,7 +192,10 @@ genann *genann_init(int inputs, int hidden_layers, int hidden, int outputs) {
     ret->nn1 = (fffc_t*)malloc(bytes);
     uint64_t seed = 1;
     fffc.init(ret->nn1, bytes, seed, inputs, hidden_layers, hidden, outputs);
-    assertion(ret->total_weights == fffc_weights_count(inputs, hidden_layers, hidden, outputs));
+    assertion(ret->total_weights == fffc_weights_count(inputs, hidden_layers, hidden, outputs),
+              "total_weights: %d fffc_weights_count(%d, %d, %d, %d): %d",
+              ret->total_weights, inputs, hidden_layers, hidden, outputs,
+              fffc_weights_count(inputs, hidden_layers, hidden, outputs));
     genann_randomize(ret);
     return ret;
 }
@@ -248,7 +251,13 @@ void genann_randomize(genann *ann) {
         double r = GENANN_RANDOM();
         /* Sets weights from -0.5 to 0.5. */
         ann->weight[i] = r - 0.5;
-        ann->nn1->iw[i] = ann->weight[i]; // TODO: (temp) sync randomization
+        if (ann->nn1->layers != 0) {
+            ann->nn1->iw[i] = ann->weight[i]; // TODO: (temp) sync randomization
+        } else {
+            ann->nn1->ow[i] = ann->weight[i];
+            assert(ann->nn1->iw == null);
+            assert(ann->nn1->hw == null);
+        }
     }
 }
 
@@ -319,69 +328,9 @@ static inline fffc_type fffc_w_x_i(const fffc_type* restrict w,
     }
 }
 
-
-// TODO: move to fffc.h
-/* static */ fffc_type* fffc_inference(fffc_t* nn, const fffc_type* input) {
-    // TODO: delete PARANOIDAL asserts
-    assertion(fffc_inference_state_count(nn->hidden) == 2 * nn->hidden);
-    fffc_type* s[2] = { nn->state, nn->state + nn->hidden };
-    fffc_type* i = (fffc_type*)input; // because i/o swap below
-    fffc_type* o = s[0];
-    nn->derivative_hidden = fffc_derivative_of(nn->activation_hidden);
-    nn->derivative_output = fffc_derivative_of(nn->activation_output);
-    /* input -> hidden layer */
-    const fffc_type* w = nn->iw;
-    for (int64_t j = 0; j < nn->hidden; j++) {
-
-//      traceln("w[0] %.16e", w[0]);
-//      for (int64_t k = 0; k < nn->inputs; ++k) {
-//          traceln("w[%lld] %.16e i[%lld]: %.16e", k + 1, w[k + 1], k, i[k]);
-//      }
-
-        *o++ = nn->activation_hidden(fffc_w_x_i(w, i, nn->inputs));
-//      traceln("o[0][%lld]: %.16e", j, *(o - 1));
-        w += nn->inputs + 1;
-    }
-    int ix = 0; // state index for inference only networks
-    i = s[0]; // "o" already incremented above
-    w = nn->hw;
-    for (int64_t h = 0; h < nn->layers - 1; h++) {
-        for (int64_t j = 0; j < nn->hidden; j++) {
-            *o++ = nn->activation_hidden(fffc_w_x_i(w, i, nn->hidden));
-//          traceln("o[%lld][%lld]: %.16e", h, j, *(o - 1));
-            w += nn->hidden + 1;
-        }
-        if (nn->delta == null) { // inference only network
-            ix = !ix;
-            i = s[ix];
-            o = s[!ix];
-        } else {
-            i += nn->hidden; // "o" already incremented above
-        }
-    }
-    if (nn->delta != null) { // training etwork
-        assertion(o == nn->state + fffc_training_state_count(nn->layers, nn->hidden));
-    }
-    w = nn->ow;
-    o = nn->output;
-    for (int64_t j = 0; j < nn->outputs; j++) {
-
-//      traceln("ouput[%d] w[0]: %.16e", j, *w);
-//      for (int64_t k = 0; k < nn->hidden; ++k) {
-//          traceln("ouput[%lld] w[%lld]: %.16e i[%lld]: %.16e", j, k + 1, w[k + 1], k, i[k]);
-//      }
-
-        *o++ = nn->activation_output(fffc_w_x_i(w, i, nn->hidden));
-//      traceln("ouput[%lld]: %.16e", j, *(o - 1));
-        w += nn->hidden + 1;
-    }
-    // TODO: delete this PARANOIDAL assert
-    assertion(w - nn->iw ==
-        fffc_weights_count(nn->inputs, nn->layers, nn->hidden, nn->outputs));
-    return nn->output;
-}
-
 double const *genann_run(genann *ann, double const *inputs) {
+    ann->nn1->activation_hidden = fffc_activation_of(ann->activation_hidden);
+    ann->nn1->activation_output = fffc_activation_of(ann->activation_output);
     ann->derivative_hidden = derivative_of(ann->activation_hidden);
     ann->derivative_output = derivative_of(ann->activation_output);
     double const *w = ann->weight;
@@ -392,15 +341,23 @@ double const *genann_run(genann *ann, double const *inputs) {
     memcpy(ann->output, inputs, sizeof(double) * ann->inputs);
     int h, j, k;
     if (!ann->hidden_layers) {
-        assert(false);
         double *ret = o;
         for (j = 0; j < ann->outputs; ++j) {
+//          traceln("ouput[%d] w[0]: %.16e", j, *w);
             double sum = *w++ * -1.0;
             for (k = 0; k < ann->inputs; ++k) {
+//              traceln("ouput[%d] w[%d]: %.16e i[%d]: %.16e", j, k + 1, *w, k, i[k]);
                 sum += *w++ * i[k];
             }
             *o++ = ann->activation_output(sum);
+//          traceln("ouput[%d]: %.16e", j, *(o - 1));
         }
+        fffc.inference(ann->nn1, inputs);
+        bool equal = memcmp(ret, ann->nn1->output, ann->outputs * sizeof(double)) == 0;
+        if (!equal) {
+            traceln("output: ann: %.15e nn: %.15e", *ret, *ann->nn1->output);
+        }
+        assertion(equal);
         return ret;
     }
     /* Figure input layer */
@@ -453,10 +410,8 @@ double const *genann_run(genann *ann, double const *inputs) {
     assertion(ann->total_weights ==
         fffc_weights_count(ann->inputs, ann->hidden_layers, ann->hidden, ann->outputs));
     memcpy(ann->nn1->iw, ann->weight, sizeof(fffc_type) * ann->total_weights);
-    ann->nn1->activation_hidden = fffc_activation_of(ann->activation_hidden);
-    ann->nn1->activation_output = fffc_activation_of(ann->activation_output);
-    fffc_inference(ann->nn1, inputs);
-    bool equal = memcmp(ret, ann->nn1->output, ann->outputs) == 0;
+    fffc.inference(ann->nn1, inputs);
+    bool equal = memcmp(ret, ann->nn1->output, ann->outputs * sizeof(double)) == 0;
     if (!equal) {
         traceln("output: ann: %.15e nn: %.15e", *ret, *ann->nn1->output);
     }
@@ -465,95 +420,6 @@ double const *genann_run(genann *ann, double const *inputs) {
 }
 
 // TODO: move to fffc.c
-
-/* static */ void fffc_train(fffc_t* nn, fffc_type const* inputs,
-        const fffc_type* truth, fffc_type learning_rate) {
-    fffc_type const* output = fffc.inference(nn, inputs);
-    {   // calculate the output layer deltas.
-        fffc_type const *o = output; /* First output. */
-        fffc_type *d = nn->od; // output delta
-        fffc_type const* t = truth; // pointer to the first grownd truth value
-        for (int64_t j = 0; j < nn->outputs; j++) {
-            *d++ = (*t - *o) * nn->derivative_output(*o);
-//          traceln("od[%lld]: %.17e", j, *(d - 1));
-            o++; t++;
-        }
-    }
-    assertion(nn->delta + nn->layers * nn->hidden == nn->od);
-    // hidden layer deltas, start at the last layer and work upward.
-    const int64_t hh1 = (nn->hidden + 1) * nn->hidden;
-    fffc_type* ww = nn->ow;
-    assertion(nn->output + nn->outputs == nn->state);
-    for (int64_t h = nn->layers - 1; h >= 0; h--) {
-        if (h != nn->layers) {
-            assertion(ww == nn->hw + hh1 * h);
-        }
-        /* Find first output and delta in this layer. */
-        fffc_type *o = nn->state + nn->hidden * h;
-        fffc_type *d = nn->delta + nn->hidden * h;
-        /* Find first delta in following layer (which may be .delta[] or .od[]). */
-        fffc_type const * const dd = (h == nn->layers - 1) ?
-            nn->od : nn->delta + (h + 1) * nn->hidden;
-        if (h == nn->layers - 1) {
-            assertion(dd == nn->od);
-        }
-        for (int64_t j = 0; j < nn->hidden; j++) {
-            fffc_type delta = 0;
-            const int64_t n = h == nn->layers - 1 ? nn->outputs : nn->hidden;
-            for (int64_t k = 0; k < n; k++) {
-                const fffc_type forward_delta = dd[k];
-//              traceln("dd[%lld]: %25.17e", k, dd[k]);
-                const int64_t windex = k * (nn->hidden + 1) + (j + 1);
-                const fffc_type forward_weight = ww[windex];
-                delta += forward_delta * forward_weight;
-//              traceln("delta: %25.17e := forward_delta: %25.17e "
-//                      "forward_weight: %25.17e\n", delta, forward_delta,
-//                      forward_weight);
-            }
-            *d = nn->derivative_hidden(*o) * delta;
-//          traceln("d[%lld]: %25.17e o: %25.17e delta: %25.17e", j, *d, *o, delta);
-            d++; o++;
-        }
-        ww = nn->hw + (h - 1) * hh1;
-//      traceln("nn->hw - ww %lld", nn->hw - ww);
-    }
-    {   // Train the outputs.
-        fffc_type const *d = nn->od; /* output delta. */
-        /* Find first weight to first output delta. */
-        fffc_type *w = nn->ow;
-        /* Find first output in previous layer. */
-        fffc_type const * const i = nn->state + nn->hidden * (nn->layers - 1);
-        /* Set output layer weights. */
-        for (int64_t j = 0; j < nn->outputs; j++) {
-            *w++ += *d * learning_rate * -1.0; // bias
-            for (int64_t k = 1; k < nn->hidden + 1; k++) {
-                *w++ += *d * learning_rate * i[k - 1];
-//              traceln("output[%lld] i[%lld] %25.17e w %25.17e",
-//                  j, k - 1, i[k - 1], *(w - 1));
-            }
-            ++d;
-        }
-        assertion(w - nn->iw ==
-            fffc_weights_count(nn->inputs, nn->layers, nn->hidden, nn->outputs));
-    }
-    /* Train the hidden layers. */
-    for (int64_t h = nn->layers - 1; h >= 0; h--) {
-        fffc_type const* d = nn->delta + h * nn->hidden;
-        fffc_type const* i = h == 0 ? inputs : nn->state + (h - 1) * nn->hidden;
-        fffc_type *w = h == 0 ? nn->iw : nn->hw + hh1 * (h - 1);
-        for (int64_t j = 0; j < nn->hidden; j++) {
-//          traceln("hidden layer[%lld][%lld] weights w.ofs=%lld\n", h, j, w - nn->iw);
-            *w++ += *d * learning_rate * -1.0; // bias
-//          traceln("w[0] (bias)=%25.17e d=%25.17e", *(w - 1), *d);
-            const int64_t n = (h == 0 ? nn->inputs : nn->hidden) + 1;
-            for (int64_t k = 1; k < n; k++) {
-                *w++ += *d * learning_rate * i[k - 1];
-//              traceln("i[%lld] %25.17e w %25.17e ", k - 1, i[k - 1], *(w - 1));
-            }
-            ++d;
-        }
-    }
-}
 
 void genann_train(genann *ann, double const *inputs, double const *desired_outputs, double learning_rate) {
     /* To begin with, we must run the network forward. */
@@ -568,7 +434,7 @@ void genann_train(genann *ann, double const *inputs, double const *desired_outpu
         /* Set output layer deltas. */
         for (j = 0; j < ann->outputs; ++j) {
             *d++ = (*t - *o) * ann->derivative_output(*o);
-//          traceln("od[%d]: %.17e", j, *(d - 1));
+//          traceln("o[%d]: %.17e od[%d]: %.17e", j, *o, j, *(d - 1));
             ++o; ++t;
         }
     }
@@ -616,8 +482,7 @@ void genann_train(genann *ann, double const *inputs, double const *desired_outpu
             *w++ += *d * learning_rate * -1.0;
             for (k = 1; k < (ann->hidden_layers ? ann->hidden : ann->inputs) + 1; ++k) {
                 *w++ += *d * learning_rate * i[k - 1];
-//              traceln("output[%d] i[%d] %25.17e w %25.17e",
-//                  j, k - 1, i[k - 1], *(w - 1));
+//              traceln("output[%d] i[%d] %25.17e w %25.17e", j, k - 1, i[k - 1], *(w - 1));
             }
             ++d;
         }
@@ -647,11 +512,12 @@ void genann_train(genann *ann, double const *inputs, double const *desired_outpu
         }
     }
     /////////////////////////////////////////////
-    fffc_train(ann->nn1, inputs, desired_outputs, learning_rate);
+    fffc.train(ann->nn1, inputs, desired_outputs, learning_rate);
     for (int i = 0; i < ann->total_weights; i++) {
-        assertion(ann->weight[i] == ann->nn1->iw[i],
+        fffc_type* weights = ann->nn1->iw != null ? ann->nn1->iw : ann->nn1->ow;
+        assertion(ann->weight[i] == weights[i],
             "ann.weight[%d] != nn[%d]\n ann: %25.17e\n nn1: %25.17e\n",
-            i, i, ann->weight[i], ann->nn1->iw[i]);
+            i, i, ann->weight[i], weights[i]);
     }
 }
 

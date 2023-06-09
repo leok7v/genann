@@ -152,24 +152,16 @@
     </PreBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClInclude Include="..\ann.h" />
     <ClInclude Include="..\dot_product.h" />
     <ClInclude Include="..\fffc.h" />
     <ClInclude Include="..\genann.h" />
-    <ClInclude Include="..\nnn.h" />
     <ClInclude Include="..\rt.h" />
-    <ClCompile Include="..\ann.c" />
     <ClCompile Include="..\dot_product.c" />
     <ClCompile Include="..\genann.c" />
     <ClCompile Include="..\main.c" />
     <ClCompile Include="..\main1.c" />
     <ClCompile Include="..\main2.c" />
     <ClCompile Include="..\main3.c" />
-    <ClCompile Include="..\nnn-main.c">
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
-    </ClCompile>
-    <ClCompile Include="..\nnn.c" />
   </ItemGroup>
   <ItemGroup>
     <Text Include="..\scratch.txt" />
