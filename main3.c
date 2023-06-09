@@ -31,7 +31,7 @@ static void addition() {
             const double* output = genann_run(nn, test);
             double loss = output[0] - (test[0] + test[1]);
             loss = sqrt(loss * loss);
-            traceln("%d loss: %.7f", epoch, loss);
+            println("%d loss: %.7f", epoch, loss);
         }
     }
     for (int i = 0; i < 24; i++) {
@@ -39,7 +39,7 @@ static void addition() {
         test[0] = (double)(int)((100.0 * random32(&seed)) / (double)UINT32_MAX);
         test[1] = (double)(int)((100.0 * random32(&seed)) / (double)UINT32_MAX);
         const double* output = genann_run(nn, test);
-        traceln("%2.0f + %2.0f = %3.0f", test[0], test[1], output[0]);
+        println("%2.0f + %2.0f = %3.0f", test[0], test[1], output[0]);
     }
     genann_free(nn);
 }
@@ -63,7 +63,7 @@ int main3(int argc, const char* argv[]) {
                     nn = genann_init(inputs, layers, hidden, outputs);
                     nn->activation_hidden = genann_act_linear;
                     nn->activation_output = genann_act_linear;
-//                  traceln("inputs: %d layers: %d hidden: %d outputs: %d",
+//                  println("inputs: %d layers: %d hidden: %d outputs: %d",
 //                           inputs, layers, hidden, outputs);
                     for (int e = 0; e < epochs; e++) {
                         genann_train(nn, input, output, learning_rate);
@@ -75,7 +75,7 @@ int main3(int argc, const char* argv[]) {
             }
         }
     }
-    traceln("done");
+    println("done");
     addition();
     return 0;
 }

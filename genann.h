@@ -28,7 +28,7 @@
 #define GENANN_H
 
 #include <stdio.h>
-#include "fffc.h"
+#include "fcl.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -71,7 +71,7 @@ typedef struct genann {
 
     genann_actfun derivative_hidden;
     genann_actfun derivative_output;
-    fffc_t* nn1;
+    fcl_t* nn1;
 } genann;
 
 /* Creates and returns a new ann. */

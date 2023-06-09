@@ -2,7 +2,7 @@
 #include "rt.h"
 #include <math.h>
 #include "genann.h"
-#include "fffc.h"
+#include "fcl.h"
 // https://github.com/codeplea/genann
 // https://github.com/libfann/fann
 // https://github.com/fabiooshiro/redesepstemicas/tree/master/RedesEpstemicas/lwneuralnet-0.8/source

@@ -14,11 +14,11 @@ extern "C" {
 
 #define thread_local __declspec(thread)
 
-#define traceln(...) traceline(__FILE__, __LINE__, __func__, "" __VA_ARGS__)
+#define println(...) printline(__FILE__, __LINE__, __func__, "" __VA_ARGS__)
 
 #define assertion(b, ...) do {                                              \
     if (!(b)) {                                                             \
-        traceln("%s false\n", #b); traceln("" __VA_ARGS__);                 \
+        println("%s false\n", #b); println("" __VA_ARGS__);                 \
         printf("%s false\n", #b); printf("" __VA_ARGS__); printf("\n");     \
         __debugbreak();                                                     \
         exit(1);                                                            \
@@ -54,14 +54,14 @@ enum {
 uint32_t random32(uint32_t* state); // state aka seed
 double   seconds();     // seconds since boot (3/10MHz resolution)
 int64_t  nanoseconds(); // nanoseconds since boot (3/10MHz resolution)
-void     traceline(const char* file, int line, const char* func,
+void     printline(const char* file, int line, const char* func,
                    const char* format, ...);
 
 
 #define fatal_if(b, ...) do {                  \
     bool _b_ = (b);                       \
     if (_b_) {                            \
-        traceline(__FILE__, __LINE__, __func__, "" __VA_ARGS__); \
+        printline(__FILE__, __LINE__, __func__, "" __VA_ARGS__); \
         fprintf(stderr, "%s failed", #b); \
         exit(1);                          \
     }                                     \
@@ -116,7 +116,7 @@ int64_t nanoseconds() {
     return (int64_t)(seconds() * NSEC_IN_SEC);
 }
 
-void traceline(const char* file, int line, const char* func,
+void printline(const char* file, int line, const char* func,
         const char* format, ...) {
     char text[1024];
     va_list vl;
